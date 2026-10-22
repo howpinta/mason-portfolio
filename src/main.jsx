@@ -8,6 +8,9 @@ import profileImage from './assets/profile.png';
 // A filename becomes the project title; files named Project-Name__01, __02 etc.
 // become slides of the same project. Legacy prefix filenames still work.
 const files = import.meta.glob('./assets/projects/**/*.{jpg,jpeg,png,webp,avif,mp4,webm}', {eager:true,query:'?url',import:'default'});
+// Optional video covers: src/assets/thumbnails/<exact video filename without extension>.webp/.jpg/.png
+const thumbnailFiles = import.meta.glob('./assets/thumbnails/**/*.{jpg,jpeg,png,webp}', {eager:true,query:'?url',import:'default'});
+const thumbnailMap = new Map(Object.entries(thumbnailFiles).map(([path,url])=>[path.split('/').pop().replace(/\.[^.]+$/,'').toLowerCase(),url]));
 const names={design:'Graphic Design',video:'Video Editing',ai:'AI Creative',web:'Web Design',social:'Social Media'};
 const folderCategories={'graphic design':'design','design':'design','video':'video','video editing':'video','ai creative':'ai','ai':'ai','social media':'social','social':'social','web design':'web','web':'web'};
 const prettify = name => name.replace(/[-_]+/g,' ').replace(/\s+/g,' ').trim();
@@ -21,7 +24,7 @@ const projects=Object.entries(files).map(([path,url])=>{
   const rawName=legacy ? legacy[2] : stem.replace(/__(\d+)$/,'');
   const sequence=Number(legacy?.[3] || stem.match(/__(\d+)$/)?.[1] || 1);
   const title=prettify(rawName)||'Untitled';
-  return {category,title,sequence,url,isVideo:/\.(mp4|webm)$/i.test(filename)};
+  return {category,title,sequence,url,isVideo:/\.(mp4|webm)$/i.test(filename),thumbnail:thumbnailMap.get(stem.toLowerCase()) || null};
 }).reduce((acc,item)=>{
   const id=item.category+'__'+item.title.toLowerCase();
   let group=acc.find(p=>p.id===id);
@@ -29,29 +32,24 @@ const projects=Object.entries(files).map(([path,url])=>{
   group.media.push(item);return acc;
 },[]).map(p=>({...p,media:p.media.sort((a,b)=>a.sequence-b.sequence)}));
 
-function SmartVideo({src,controls=false,className=''}){
+function SmartVideo({src,controls=false,className='',thumbnail=null,title=''}){
  const ref=useRef(null);
- const [nearby,setNearby]=useState(controls);
  const [hovered,setHovered]=useState(false);
  const [muted,setMuted]=useState(!controls);
  const [playing,setPlaying]=useState(false);
  const [waiting,setWaiting]=useState(controls);
- useEffect(()=>{
-  if(controls)return;
-  const el=ref.current;if(!el)return;
-  const obs=new IntersectionObserver(entries=>setNearby(entries[0].isIntersecting),{rootMargin:'150px 0px',threshold:0});
-  obs.observe(el);return()=>obs.disconnect();
- },[src,controls]);
+ const canHover=typeof window!=='undefined' && window.matchMedia('(hover: hover) and (pointer: fine)').matches;
  useEffect(()=>{
   const el=ref.current;if(!el||controls)return;
-  if(hovered&&nearby&&window.matchMedia('(hover: hover) and (pointer: fine)').matches){
-   el.play().then(()=>setPlaying(true)).catch(()=>setPlaying(false));
-  }else{el.pause();setPlaying(false)}
- },[hovered,nearby,controls,src]);
+  if(hovered&&canHover){el.play().then(()=>setPlaying(true)).catch(()=>setPlaying(false));}
+  else {el.pause();setPlaying(false);}
+ },[hovered,controls,canHover,src]);
  return <div className={'video-wrap '+className+(controls?' video-detail':' video-preview')}
   onMouseEnter={()=>setHovered(true)} onMouseLeave={()=>setHovered(false)}>
-  <video key={src} ref={ref} src={controls||nearby?src:undefined} muted={muted}
-   playsInline loop preload={controls?'auto':nearby?'metadata':'none'} controls={controls}
+  {!controls&&thumbnail&&<img className="video-poster" src={thumbnail} loading="lazy" decoding="async" alt={title+' video cover'}/>}
+  <video key={src} ref={ref} src={controls||(hovered&&canHover)?src:undefined} muted={muted}
+   playsInline loop preload={controls?'metadata':'none'} controls={controls}
+   className={!controls&&thumbnail?'hover-video '+(playing?'is-playing':''):''}
    onLoadStart={()=>controls&&setWaiting(true)}
    onWaiting={()=>controls&&setWaiting(true)}
    onCanPlay={()=>setWaiting(false)} onPlaying={()=>{setPlaying(true);setWaiting(false)}}
@@ -62,7 +60,10 @@ function SmartVideo({src,controls=false,className=''}){
   {!controls&&!playing&&<Play className="video-play" size={24} fill="white"/>}
  </div>
 }
-function Media({item,detail=false}){return item.isVideo?<SmartVideo key={item.url+(detail?'detail':'preview')} src={item.url} controls={detail}/>:<img src={item.url} loading={detail?'eager':'lazy'} decoding="async" alt={item.title}/>}
+function Media({item,detail=false}){
+ if(item.isVideo) return <SmartVideo key={item.url+(detail?'detail':'preview')} src={item.url} controls={detail} thumbnail={item.thumbnail} title={item.title}/>;
+ return <img src={item.url} loading={detail?'eager':'lazy'} decoding="async" alt={item.title}/>;
+}
 const categories=[...new Set(projects.map(p=>p.category))].sort((a,b)=> (names[a]||a).localeCompare(names[b]||b));
 const categoryLabel=c=>names[c]||prettify(c).replace(/\b\w/g,x=>x.toUpperCase());
 function App(){const [filter,setFilter]=useState('all');const [selected,setSelected]=useState(null);const [slide,setSlide]=useState(0);
