@@ -38,7 +38,35 @@ function SmartVideo({src,controls=false,className='',thumbnail=null,title=''}){
  const [muted,setMuted]=useState(!controls);
  const [playing,setPlaying]=useState(false);
  const [waiting,setWaiting]=useState(false);
+ const [needsTap,setNeedsTap]=useState(false);
  const canHover=typeof window!=='undefined' && window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+ // Attempt playback as soon as the detail video is mounted. If the browser
+ // rejects audible autoplay, try muted playback and provide a clear tap fallback.
+ useEffect(()=>{
+  if(!controls)return;
+  const el=ref.current;if(!el)return;
+  let cancelled=false;
+  setNeedsTap(false);
+  const start=async()=>{
+   try {
+    el.muted=false;setMuted(false);
+    await el.play();
+   } catch {
+    if(cancelled)return;
+    try {
+     el.muted=true;setMuted(true);
+     await el.play();
+    } catch {if(!cancelled)setNeedsTap(true)}
+   }
+  };
+  start();
+  return()=>{cancelled=true;el.pause()};
+ },[controls,src]);
+ const manualPlay=()=>{
+  const el=ref.current;if(!el)return;
+  el.muted=false;setMuted(false);
+  el.play().then(()=>setNeedsTap(false)).catch(()=>setNeedsTap(true));
+ };
  useEffect(()=>{
   const el=ref.current;if(!el||controls)return;
   if(hovered&&canHover){el.play().then(()=>setPlaying(true)).catch(()=>setPlaying(false));}
@@ -48,15 +76,16 @@ function SmartVideo({src,controls=false,className='',thumbnail=null,title=''}){
   onMouseEnter={()=>setHovered(true)} onMouseLeave={()=>setHovered(false)}>
   {!controls&&thumbnail&&<img className="video-poster" src={thumbnail} loading="lazy" decoding="async" alt={title+' video cover'}/>}
   <video key={src} ref={ref} src={controls||(hovered&&canHover)?src:undefined} muted={muted}
-   playsInline loop={!controls} preload={controls?'metadata':'none'} controls={controls} poster={controls?(thumbnail||undefined):undefined}
+   playsInline loop={!controls} preload={controls?'auto':'none'} controls={controls} autoPlay={controls} poster={controls?(thumbnail||undefined):undefined}
    className={!controls&&thumbnail?'hover-video '+(playing?'is-playing':''):''}
    onWaiting={e=>{if(controls&&!e.currentTarget.paused)setWaiting(true)}}
    onCanPlay={()=>setWaiting(false)} onCanPlayThrough={()=>setWaiting(false)} onLoadedData={()=>setWaiting(false)}
-   onPlaying={()=>{setPlaying(true);setWaiting(false)}}
+   onPlaying={()=>{setPlaying(true);setWaiting(false);setNeedsTap(false)}}
    onPlay={()=>{setPlaying(true);setWaiting(false)}} onPause={()=>{setPlaying(false);setWaiting(false)}}
-   onError={()=>setWaiting(false)}
+   onError={()=>{setWaiting(false);setNeedsTap(true)}}
    aria-label={controls?'Project video':'Video preview'}/>
-  {controls&&waiting&&<div className="video-loading" role="status" aria-label="Loading video"><span className="video-spinner"/></div>}
+  {controls&&needsTap&&<button type="button" className="video-tap-to-play" onClick={manualPlay} aria-label="Tap to play video"><Play size={24} fill="currentColor"/> Tap to play</button>}
+  {controls&&waiting&&!needsTap&&<div className="video-loading" role="status" aria-label="Loading video"><span className="video-spinner"/></div>}
   {controls&&<button className="sound-toggle" onClick={()=>setMuted(x=>!x)} aria-label={muted?'Unmute':'Mute'}>{muted?<VolumeX size={18}/>:<Volume2 size={18}/>}</button>}
   {!controls&&!playing&&<Play className="video-play" size={24} fill="white"/>}
  </div>
