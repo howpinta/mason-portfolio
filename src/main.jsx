@@ -29,13 +29,40 @@ const projects=Object.entries(files).map(([path,url])=>{
   group.media.push(item);return acc;
 },[]).map(p=>({...p,media:p.media.sort((a,b)=>a.sequence-b.sequence)}));
 
-function SmartVideo({src,active=true,controls=false,className=''}){
- const ref=useRef(null);const [visible,setVisible]=useState(false);const [muted,setMuted]=useState(!controls);const [playing,setPlaying]=useState(false);
- useEffect(()=>{const el=ref.current;if(!el)return;const obs=new IntersectionObserver(entries=>setVisible(entries[0].isIntersecting),{threshold:.35});obs.observe(el);return()=>obs.disconnect()},[src]);
- useEffect(()=>{const el=ref.current;if(!el)return;if(visible&&active){el.play().then(()=>setPlaying(true)).catch(()=>setPlaying(false))}else{el.pause();setPlaying(false)}},[visible,active,src]);
- return <div className={'video-wrap '+className}><video ref={ref} src={src} muted={muted} playsInline loop preload="metadata" controls={controls} onPlay={()=>setPlaying(true)} onPause={()=>setPlaying(false)}/>{controls&&<button className="sound-toggle" onClick={()=>setMuted(x=>!x)} aria-label={muted?'Unmute':'Mute'}>{muted?<VolumeX size={18}/>:<Volume2 size={18}/>}</button>}{!controls&&!playing&&<Play className="video-play" size={24} fill="white"/>}</div>
+function SmartVideo({src,controls=false,className=''}){
+ const ref=useRef(null);
+ const [nearby,setNearby]=useState(controls);
+ const [hovered,setHovered]=useState(false);
+ const [muted,setMuted]=useState(!controls);
+ const [playing,setPlaying]=useState(false);
+ const [waiting,setWaiting]=useState(controls);
+ useEffect(()=>{
+  if(controls)return;
+  const el=ref.current;if(!el)return;
+  const obs=new IntersectionObserver(entries=>setNearby(entries[0].isIntersecting),{rootMargin:'150px 0px',threshold:0});
+  obs.observe(el);return()=>obs.disconnect();
+ },[src,controls]);
+ useEffect(()=>{
+  const el=ref.current;if(!el||controls)return;
+  if(hovered&&nearby&&window.matchMedia('(hover: hover) and (pointer: fine)').matches){
+   el.play().then(()=>setPlaying(true)).catch(()=>setPlaying(false));
+  }else{el.pause();setPlaying(false)}
+ },[hovered,nearby,controls,src]);
+ return <div className={'video-wrap '+className+(controls?' video-detail':' video-preview')}
+  onMouseEnter={()=>setHovered(true)} onMouseLeave={()=>setHovered(false)}>
+  <video key={src} ref={ref} src={controls||nearby?src:undefined} muted={muted}
+   playsInline loop preload={controls?'auto':nearby?'metadata':'none'} controls={controls}
+   onLoadStart={()=>controls&&setWaiting(true)}
+   onWaiting={()=>controls&&setWaiting(true)}
+   onCanPlay={()=>setWaiting(false)} onPlaying={()=>{setPlaying(true);setWaiting(false)}}
+   onPlay={()=>setPlaying(true)} onPause={()=>setPlaying(false)}
+   aria-label={controls?'Project video':'Video preview'}/>
+  {controls&&waiting&&<div className="video-loading" role="status" aria-label="Loading video"><span className="video-spinner"/></div>}
+  {controls&&<button className="sound-toggle" onClick={()=>setMuted(x=>!x)} aria-label={muted?'Unmute':'Mute'}>{muted?<VolumeX size={18}/>:<Volume2 size={18}/>}</button>}
+  {!controls&&!playing&&<Play className="video-play" size={24} fill="white"/>}
+ </div>
 }
-function Media({item,detail=false}){return item.isVideo?<SmartVideo src={item.url} controls={detail}/>:<img src={item.url} loading={detail?'eager':'lazy'} decoding="async" alt={item.title}/>}
+function Media({item,detail=false}){return item.isVideo?<SmartVideo key={item.url+(detail?'detail':'preview')} src={item.url} controls={detail}/>:<img src={item.url} loading={detail?'eager':'lazy'} decoding="async" alt={item.title}/>}
 const categories=[...new Set(projects.map(p=>p.category))].sort((a,b)=> (names[a]||a).localeCompare(names[b]||b));
 const categoryLabel=c=>names[c]||prettify(c).replace(/\b\w/g,x=>x.toUpperCase());
 function App(){const [filter,setFilter]=useState('all');const [selected,setSelected]=useState(null);const [slide,setSlide]=useState(0);
