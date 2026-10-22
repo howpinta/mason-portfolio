@@ -37,7 +37,7 @@ function SmartVideo({src,controls=false,className='',thumbnail=null,title=''}){
  const [hovered,setHovered]=useState(false);
  const [muted,setMuted]=useState(!controls);
  const [playing,setPlaying]=useState(false);
- const [waiting,setWaiting]=useState(controls);
+ const [waiting,setWaiting]=useState(false);
  const canHover=typeof window!=='undefined' && window.matchMedia('(hover: hover) and (pointer: fine)').matches;
  useEffect(()=>{
   const el=ref.current;if(!el||controls)return;
@@ -48,12 +48,13 @@ function SmartVideo({src,controls=false,className='',thumbnail=null,title=''}){
   onMouseEnter={()=>setHovered(true)} onMouseLeave={()=>setHovered(false)}>
   {!controls&&thumbnail&&<img className="video-poster" src={thumbnail} loading="lazy" decoding="async" alt={title+' video cover'}/>}
   <video key={src} ref={ref} src={controls||(hovered&&canHover)?src:undefined} muted={muted}
-   playsInline loop preload={controls?'metadata':'none'} controls={controls}
+   playsInline loop={!controls} preload={controls?'metadata':'none'} controls={controls} poster={controls?(thumbnail||undefined):undefined}
    className={!controls&&thumbnail?'hover-video '+(playing?'is-playing':''):''}
-   onLoadStart={()=>controls&&setWaiting(true)}
-   onWaiting={()=>controls&&setWaiting(true)}
-   onCanPlay={()=>setWaiting(false)} onPlaying={()=>{setPlaying(true);setWaiting(false)}}
-   onPlay={()=>setPlaying(true)} onPause={()=>setPlaying(false)}
+   onWaiting={e=>{if(controls&&!e.currentTarget.paused)setWaiting(true)}}
+   onCanPlay={()=>setWaiting(false)} onCanPlayThrough={()=>setWaiting(false)} onLoadedData={()=>setWaiting(false)}
+   onPlaying={()=>{setPlaying(true);setWaiting(false)}}
+   onPlay={()=>{setPlaying(true);setWaiting(false)}} onPause={()=>{setPlaying(false);setWaiting(false)}}
+   onError={()=>setWaiting(false)}
    aria-label={controls?'Project video':'Video preview'}/>
   {controls&&waiting&&<div className="video-loading" role="status" aria-label="Loading video"><span className="video-spinner"/></div>}
   {controls&&<button className="sound-toggle" onClick={()=>setMuted(x=>!x)} aria-label={muted?'Unmute':'Mute'}>{muted?<VolumeX size={18}/>:<Volume2 size={18}/>}</button>}
@@ -64,10 +65,24 @@ function Media({item,detail=false}){
  if(item.isVideo) return <SmartVideo key={item.url+(detail?'detail':'preview')} src={item.url} controls={detail} thumbnail={item.thumbnail} title={item.title}/>;
  return <img src={item.url} loading={detail?'eager':'lazy'} decoding="async" alt={item.title}/>;
 }
+// Stable, mixed ordering: images and videos are interleaved and shuffled within each type.
+// This does not change on refresh and does not break grouped slideshow projects.
+const stableHash = str => { let h=2166136261; for(const c of str){h=Math.imul(h^c.charCodeAt(0),16777619)} return h>>>0; };
+const mixProjects = items => {
+ const images=items.filter(p=>!p.media[0].isVideo).sort((a,b)=>stableHash(a.id)-stableHash(b.id));
+ const videos=items.filter(p=>p.media[0].isVideo).sort((a,b)=>stableHash(a.id)-stableHash(b.id));
+ const mixed=[];
+ // Put different media types next to each other when possible.
+ while(images.length||videos.length){
+  if(images.length)mixed.push(images.shift());
+  if(videos.length)mixed.push(videos.shift());
+ }
+ return mixed;
+};
 const categories=[...new Set(projects.map(p=>p.category))].sort((a,b)=> (names[a]||a).localeCompare(names[b]||b));
 const categoryLabel=c=>names[c]||prettify(c).replace(/\b\w/g,x=>x.toUpperCase());
 function App(){const [filter,setFilter]=useState('all');const [selected,setSelected]=useState(null);const [slide,setSlide]=useState(0);
- const filtered=projects.filter(p=>filter==='all'||p.category===filter);
+ const filtered=mixProjects(projects.filter(p=>filter==='all'||p.category===filter));
  const open=p=>{setSelected(p);setSlide(0);history.replaceState(null,'','#project-'+p.id.toLowerCase().replace(/[^a-z0-9]+/g,'-'))};
  const close=()=>{setSelected(null);history.replaceState(null,'',location.pathname+location.search)};
  useEffect(()=>{const handler=e=>{if(e.key==='Escape')close();if(selected&&e.key==='ArrowRight')setSlide(s=>(s+1)%selected.media.length);if(selected&&e.key==='ArrowLeft')setSlide(s=>(s-1+selected.media.length)%selected.media.length)};window.addEventListener('keydown',handler);return()=>window.removeEventListener('keydown',handler)},[selected]);
