@@ -15,6 +15,8 @@ const thumbnailMap = new Map(Object.entries(thumbnailFiles).map(([path,url])=>[p
 // URL slugs ignore spaces, punctuation and letter case.
 const categorySlug = name => name.toLowerCase().replace(/[^a-z0-9]/g, '');
 const prettify = name => name.replace(/[-_]+/g,' ').replace(/\s+/g,' ').trim();
+// Keep asset filenames separate from the capitalization shown on video cards.
+const videoTitle = name => prettify(name).replace(/(^|\s)[a-z]/g,x=>x.toUpperCase()).replace(/\bAi\b/g,'AI');
 const projects=Object.entries(files).map(([path,url])=>{
   const parts=path.split('/');
   const filename=parts.pop();
@@ -25,7 +27,7 @@ const projects=Object.entries(files).map(([path,url])=>{
   const category=parts.length > 3 ? folder : (legacy?.[1] || 'Others');
   const rawName=legacy ? legacy[2] : stem.replace(/__(\d+)$/,'');
   const sequence=Number(legacy?.[3] || stem.match(/__(\d+)$/)?.[1] || 1);
-  const title=prettify(rawName)||'Untitled';
+  const title=(/\.(mp4|webm)$/i.test(filename) ? videoTitle(rawName) : prettify(rawName))||'Untitled';
   return {category,title,sequence,url,isVideo:/\.(mp4|webm)$/i.test(filename),thumbnail:thumbnailMap.get(stem.toLowerCase()) || null};
 }).reduce((acc,item)=>{
   const id=categorySlug(item.category)+'__'+item.title.toLowerCase();
