@@ -2,6 +2,7 @@ import React, {useEffect,useRef,useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {ArrowUpRight,ArrowDown, X, Play, Pause, Volume2, VolumeX, ChevronLeft, ChevronRight} from 'lucide-react';
 import './style.css';
+import projectDetails from './projectDetails.json';
 import profileImage from './assets/profile.png';
 
 // Add media into category folders inside src/assets/projects.
@@ -34,7 +35,9 @@ const projects=Object.entries(files).map(([path,url])=>{
   let group=acc.find(p=>p.id===id);
   if(!group){group={id,category:item.category,title:item.title,media:[]};acc.push(group)}
   group.media.push(item);return acc;
-},[]).map(p=>({...p,media:p.media.sort((a,b)=>a.sequence-b.sequence)}));
+},[]).map(p=>({...p,media:p.media.sort((a,b)=>a.sequence-b.sequence),
+  subtitle:projectDetails[p.id]?.subtitle || '',
+  description:projectDetails[p.id]?.description || ''}));
 
 function SmartVideo({src,controls=false,className='',thumbnail=null,title=''}){
  const ref=useRef(null);
@@ -119,6 +122,10 @@ const readCategoryFromUrl=()=>{
  const requested=(new URLSearchParams(window.location.search).get('category')||'').toLowerCase().replace(/[^a-z0-9]/g,'');
  return categories.find(id=>categorySlug(id)===requested) || 'all';
 };
+// Plain text with optional **bold** spans; React escapes all content.
+function ProjectDescription({text}){
+ return text.split(/\n\s*\n/).filter(p=>p.trim()).map((paragraph,i)=><p key={i}>{paragraph.split(/(\*\*[^*]+\*\*)/g).map((part,j)=>part.startsWith('**')&&part.endsWith('**')?<strong key={j}>{part.slice(2,-2)}</strong>:part)}</p>);
+}
 function App(){const [filter,setFilter]=useState(readCategoryFromUrl);const [selected,setSelected]=useState(null);const [slide,setSlide]=useState(0);
  const changeFilter=id=>{
   setFilter(id);
@@ -143,6 +150,6 @@ function App(){const [filter,setFilter]=useState(readCategoryFromUrl);const [sel
  <section className="work-section" id="work"><div className="section-heading"><div><span className="overline">01 / SELECTED PROJECTS</span><h2>THE WORK<span className="period">.</span></h2></div><span className="work-count">{filtered.length.toString().padStart(2,'0')} PROJECTS</span></div><div className="filters" role="group" aria-label="Filter projects">{[['all','All Work'],...categories.map(id=>[id,categoryLabel(id)])].map(([id,label])=><button key={id} className={filter===id?'active':''} onClick={()=>changeFilter(id)}>{label}</button>)}</div>
  <div className="masonry" key={filter}>{filtered.map((p,i)=><button className="project" key={p.id} onClick={()=>open(p)} aria-label={'View '+p.title}><div className="project-media"><Media item={p.media[0]}/><div className="project-overlay"><span>VIEW PROJECT</span><ArrowUpRight size={20}/></div>{p.media.length>1&&<span className="slides-count">{p.media.length} SLIDES</span>}</div><div className="project-meta"><div><strong>{p.title}</strong><span>{categoryLabel(p.category)}</span></div><ArrowUpRight size={17}/></div></button>)}</div>{!filtered.length&&<div className="empty">No projects in this category yet. Add media to the projects folder.</div>}</section>
  <section className="about" id="about"><span className="overline">02 / A LITTLE ABOUT ME</span><div className="about-grid"><h2>LET'S<br/>CONNECT<span className="period">.</span></h2><div className="about-copy"><p>I create social content, reels, graphics, and websites for digital brands.</p><p>Available for remote creative roles and collaborations worldwide.</p><a className="email-btn" href="mailto:themasonfunnel@gmail.com">GET IN TOUCH <ArrowUpRight size={20}/></a><div className="socials"><a href="https://www.facebook.com/OfficialMasonTang" target="_blank" rel="noreferrer">FACEBOOK ↗</a><a href="https://www.instagram.com/masonfunnel/" target="_blank" rel="noreferrer">INSTAGRAM ↗</a><a href="https://www.linkedin.com/in/mason-tang-065a97427/" target="_blank" rel="noreferrer">LINKEDIN ↗</a></div></div></div></section></main><footer><span>© {new Date().getFullYear()} MASON TANG</span><span>SOCIAL · REELS · GRAPHICS · WEB</span><a href="#top">BACK TO TOP ↑</a></footer>
- {selected&&<div className="modal-backdrop" onClick={close} role="presentation"><div className="modal" role="dialog" aria-modal="true" aria-label={selected.title} onClick={e=>e.stopPropagation()}><div className="modal-top"><div><span className="overline">{categoryLabel(selected.category)}</span><h3>{selected.title}</h3></div><button className="close-btn" onClick={close} aria-label="Close"><X size={22}/></button></div><div className="modal-media"><Media item={selected.media[slide]} detail/></div>{selected.media.length>1&&<div className="modal-controls"><button onClick={()=>setSlide(s=>(s-1+selected.media.length)%selected.media.length)} aria-label="Previous"><ChevronLeft/></button><span>{slide+1} / {selected.media.length}</span><button onClick={()=>setSlide(s=>(s+1)%selected.media.length)} aria-label="Next"><ChevronRight/></button></div>}</div></div>}</>
+ {selected&&<div className="modal-backdrop" onClick={close} role="presentation"><div className={"modal"+(selected.subtitle.trim()||selected.description.trim()?" modal-with-details":"")} role="dialog" aria-modal="true" aria-label={selected.title} onClick={e=>e.stopPropagation()}><div className="modal-top"><div><span className="overline">{categoryLabel(selected.category)}</span><h3>{selected.title}</h3></div><button className="close-btn" onClick={close} aria-label="Close"><X size={22}/></button></div><div className="modal-content"><div className="modal-media"><Media item={selected.media[slide]} detail/></div>{(selected.subtitle.trim()||selected.description.trim())&&<aside className="project-details" aria-label="Creative breakdown">{selected.subtitle.trim()&&<h4>{selected.subtitle}</h4>}{selected.description.trim()&&<ProjectDescription text={selected.description}/>}</aside>}</div>{selected.media.length>1&&<div className="modal-controls"><button onClick={()=>setSlide(s=>(s-1+selected.media.length)%selected.media.length)} aria-label="Previous"><ChevronLeft/></button><span>{slide+1} / {selected.media.length}</span><button onClick={()=>setSlide(s=>(s+1)%selected.media.length)} aria-label="Next"><ChevronRight/></button></div>}</div></div>}</>
 }
 createRoot(document.getElementById('root')).render(<App/>);
